@@ -394,7 +394,7 @@ static void sshbug_handler(union control *ctrl, void *dlg,
 #define SAVEDSESSION_LEN 2048
 
 struct sessionsaver_data {
-    union control *editbox, *listbox, *loadbutton, *savebutton, *delbutton;
+    union control *editbox, *treeselect, *loadbutton, *savebutton, *delbutton;
     union control *okbutton, *cancelbutton;
     struct sesslist sesslist;
     int midsession;
@@ -409,7 +409,7 @@ static int load_selected_session(struct sessionsaver_data *ssd,
 				 char *savedsession,
 				 void *dlg, Config *cfg, int *maybe_launch)
 {
-    int i = dlg_listbox_index(ssd->listbox, dlg);
+    int i = dlg_treeselect_index(ssd->treeselect, dlg);
     int isdef;
     if (i < 0) {
 	dlg_beep(dlg);
@@ -431,7 +431,7 @@ static int load_selected_session(struct sessionsaver_data *ssd,
     dlg_refresh(NULL, dlg);
     /* Restore the selection, which might have been clobbered by
      * changing the value of the edit box. */
-    dlg_listbox_select(ssd->listbox, dlg, i);
+    dlg_treeselect_select(ssd->treeselect, dlg, i);
     return 1;
 }
 
@@ -462,12 +462,14 @@ static void sessionsaver_handler(union control *ctrl, void *dlg,
     if (event == EVENT_REFRESH) {
 	if (ctrl == ssd->editbox) {
 	    dlg_editbox_set(ctrl, dlg, savedsession);
-	} else if (ctrl == ssd->listbox) {
+	} else if (ctrl == ssd->treeselect) {
 	    int i;
 	    dlg_update_start(ctrl, dlg);
-	    dlg_listbox_clear(ctrl, dlg);
-	    for (i = 0; i < ssd->sesslist.nsessions; i++)
-		dlg_listbox_add(ctrl, dlg, ssd->sesslist.sessions[i]);
+        dlg_treeselect_clear(ctrl, dlg);
+
+        for (i = 0; i < ssd->sesslist.nsessions; i++)
+            dlg_treeselect_add(ctrl, dlg, ssd->sesslist.sessions[i]);
+
 	    dlg_update_done(ctrl, dlg);
 	}
     } else if (event == EVENT_VALCHANGE) {
@@ -489,12 +491,12 @@ static void sessionsaver_handler(union control *ctrl, void *dlg,
 	    if (top == ssd->sesslist.nsessions) {
 	        top -= 1;
 	    }
-	    dlg_listbox_select(ssd->listbox, dlg, top);
+	    dlg_treeselect_select(ssd->treeselect, dlg, top);
 	}
     } else if (event == EVENT_ACTION) {
 	int mbl = FALSE;
 	if (!ssd->midsession &&
-	    (ctrl == ssd->listbox ||
+	    (ctrl == ssd->treeselect ||
 	     (ssd->loadbutton && ctrl == ssd->loadbutton))) {
 	    /*
 	     * The user has double-clicked a session, or hit Load.
@@ -504,13 +506,13 @@ static void sessionsaver_handler(union control *ctrl, void *dlg,
 	     * contains a hostname.
 	     */
 	    if (load_selected_session(ssd, savedsession, dlg, cfg, &mbl) &&
-		(mbl && ctrl == ssd->listbox && cfg_launchable(cfg))) {
+		(mbl && ctrl == ssd->treeselect && cfg_launchable(cfg))) {
 		dlg_end(dlg, 1);       /* it's all over, and succeeded */
 	    }
 	} else if (ctrl == ssd->savebutton) {
 	    int isdef = !strcmp(savedsession, "Default Settings");
 	    if (!savedsession[0]) {
-		int i = dlg_listbox_index(ssd->listbox, dlg);
+		int i = dlg_treeselect_index(ssd->treeselect, dlg);
 		if (i < 0) {
 		    dlg_beep(dlg);
 		    return;
@@ -534,17 +536,17 @@ static void sessionsaver_handler(union control *ctrl, void *dlg,
 	    get_sesslist(&ssd->sesslist, FALSE);
 	    get_sesslist(&ssd->sesslist, TRUE);
 	    dlg_refresh(ssd->editbox, dlg);
-	    dlg_refresh(ssd->listbox, dlg);
+	    dlg_refresh(ssd->treeselect, dlg);
 	} else if (!ssd->midsession &&
 		   ssd->delbutton && ctrl == ssd->delbutton) {
-	    int i = dlg_listbox_index(ssd->listbox, dlg);
+	    int i = dlg_treeselect_index(ssd->treeselect, dlg);
 	    if (i <= 0) {
 		dlg_beep(dlg);
 	    } else {
 		del_settings(ssd->sesslist.sessions[i]);
 		get_sesslist(&ssd->sesslist, FALSE);
 		get_sesslist(&ssd->sesslist, TRUE);
-		dlg_refresh(ssd->listbox, dlg);
+		dlg_refresh(ssd->treeselect, dlg);
 	    }
 	} else if (ctrl == ssd->okbutton) {
             if (ssd->midsession) {
@@ -559,7 +561,7 @@ static void sessionsaver_handler(union control *ctrl, void *dlg,
 	     * there was a session selected in that which had a
 	     * valid host name in it, then load it and go.
 	     */
-	    if (dlg_last_focused(ctrl, dlg) == ssd->listbox &&
+	    if (dlg_last_focused(ctrl, dlg) == ssd->treeselect &&
 		!cfg_launchable(cfg)) {
 		Config cfg2;
 		int mbl = FALSE;
@@ -1240,11 +1242,11 @@ void setup_config_box(struct controlbox *b, int midsession,
      * than alongside that edit box. */
     ctrl_columns(s, 1, 100);
     ctrl_columns(s, 2, 75, 25);
-    ssd->listbox = ctrl_listbox(s, NULL, NO_SHORTCUT,
-				HELPCTX(session_saved),
-				sessionsaver_handler, P(ssd));
-    ssd->listbox->generic.column = 0;
-    ssd->listbox->listbox.height = 7;
+    ssd->treeselect = ctrl_treeselect(s, NULL, NO_SHORTCUT,
+                                      HELPCTX(session_saved),
+                                      sessionsaver_handler, P(ssd));
+    ssd->treeselect->generic.column = 0;
+    ssd->treeselect->listbox.height = 7;
     if (!midsession) {
 	ssd->loadbutton = ctrl_pushbutton(s, "Load", 'l',
 					  HELPCTX(session_saved),
